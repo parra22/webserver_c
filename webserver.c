@@ -15,14 +15,21 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+// the port on which the server will listen
 #define PORT 8080
+// defines the buffer size for data handling
 #define BUFFER_SIZE 104857600
 
+
+/*** Helper functions for main() to function: ***/
+
+// Extracts the file extension from a given filename.
 const char *get_file_extension(const char *file_name) {
     const char *dot = strrchr(file_name, '.');
     return (!dot || dot == file_name) ? "" : dot + 1;
 }
 
+// Returns the MIME type based on the file extension.
 const char *get_mime_type(const char *file_ext) {
     if (strcasecmp(file_ext, "html") == 0 || strcasecmp(file_ext, "htm") == 0) {
         return "text/html";
@@ -37,6 +44,7 @@ const char *get_mime_type(const char *file_ext) {
     }
 }
 
+// Compares two strings case-insensitively.
 bool case_insensitive_compare(const char *s1, const char *s2) {
     while (*s1 && *s2) {
         if (tolower((unsigned char)*s1) != tolower((unsigned char)*s2)) {
@@ -48,6 +56,7 @@ bool case_insensitive_compare(const char *s1, const char *s2) {
     return *s1 == *s2;
 }
 
+// Finds a file in the current directory case-insensitively.
 char *get_file_case_insensitive(const char *file_name) {
     DIR *dir = opendir(".");
     if (!dir) {
@@ -66,6 +75,7 @@ char *get_file_case_insensitive(const char *file_name) {
     return found_file_name;
 }
 
+// Decodes a URL-encoded string.
 char *url_decode(const char *src) {
     size_t src_len = strlen(src);
     char *decoded = (char *)malloc((src_len + 1) * sizeof(char));
@@ -84,6 +94,9 @@ char *url_decode(const char *src) {
     return decoded;
 }
 
+/*Constructs an HTTP response based on the requested file.
+  It includes the MIME type in the header and the file content in the body.
+  If the file doesn’t exist, it returns a 404 Not Found response.*/
 void build_http_response(const char *file_name, const char *file_ext, char *response, size_t *response_len) {
     const char *mime_type = get_mime_type(file_ext);
     char *header = (char *)malloc(BUFFER_SIZE);
@@ -112,7 +125,9 @@ void build_http_response(const char *file_name, const char *file_ext, char *resp
     free(header);
     close(file_fd);
 }
-
+/*Runs in a separate thread to handle multiple clients on the website.
+  It receives the HTTP request, parses it to determine the requested file,
+  decodes the URL, builds the HTTP response, and sends it back to the client.*/
 void *handle_client(void *arg) {
     int client_fd = *((int *)arg);
     free(arg);
@@ -151,22 +166,23 @@ void *handle_client(void *arg) {
 int main(int argc, char *argv[]) {
     int server_fd;
     struct sockaddr_in server_addr;
-
+    // Creates a server socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Socket failed");
         exit(EXIT_FAILURE);
     }
-
+    // configs the socket address
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PORT);
-
+    
+    // Binds the server socket to the specified port.
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         close(server_fd);
         exit(EXIT_FAILURE);
     }
-
+    // Configures the socket to listen for incoming connections.
     if (listen(server_fd, 10) < 0) {
         perror("Listen failed");
         close(server_fd);
@@ -174,7 +190,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Server listening on port %d\n", PORT);
-
+    // Enters an infinite loop to accept incoming connections.
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
@@ -185,7 +201,7 @@ int main(int argc, char *argv[]) {
             free(client_fd);
             continue;
         }
-
+        // For each client connection, create a new thread to handle the request.
         pthread_t thread_id;
         pthread_create(&thread_id, NULL, handle_client, client_fd);
         pthread_detach(thread_id);
